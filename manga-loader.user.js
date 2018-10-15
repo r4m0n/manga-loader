@@ -2263,7 +2263,7 @@ var loadManga = function(imp) {
         UI.imageHeight = getEl('.ml-images img').clientHeight;
       }
       var scrollBottom = document.body.scrollHeight - ((document.body.scrollTop || document.documentElement.scrollTop) + window.innerHeight);
-      if (scrollBottom < UI.imageHeight * 2) {
+      if (scrollBottom < UI.imageHeight * (mLoadNum / 2)) {
         log('user scroll nearing end, loading more images starting from ' + resumeUrl);
         loadNextPage(resumeUrl);
       }
