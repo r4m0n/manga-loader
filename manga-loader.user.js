@@ -2103,7 +2103,7 @@ var getViewer = function(prevChapter, nextChapter) {
     }
     var code = evt.which || evt.charCode || evt.keyCode;
     // stop propagation if key is registered
-    if(code in UI.keys) evt.stopPropagation();
+    if(Object.values(UI.keys).includes(code)) evt.stopPropagation();
     // perform action
     switch(code) {
       case UI.keys.PREV_CHAP:
