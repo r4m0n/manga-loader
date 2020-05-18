@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name       Manga Loader + NSFW
 // @namespace  http://www.fuzetsu.com/MangaLoader
-// @version    1.11.24
+// @version    1.11.28
 // @description  Support for over 70 sites! Loads manga chapter into one page in a long strip format, supports switching chapters, minimal script with no dependencies, easy to implement new sites, loads quickly and works on mobile devices through bookmarklet
 // @copyright  2016+, fuzetsu
 // @noframes
@@ -175,7 +175,7 @@ var scriptName = 'Manga Loader';
 var pageTitle = document.title;
 
 var IMAGES = {
-  refresh_large: 'data:image/svg+xml;charset=utf-8,<svg width="1792" height="1792" viewBox="0 0 1792 1792" xmlns="http://www.w3.org/2000/svg"><path d="M1639 1056q0 5-1 7-64 268-268 434.5t-478 166.5q-146 0-282.5-55t-243.5-157l-129 129q-19 19-45 19t-45-19-19-45v-448q0-26 19-45t45-19h448q26 0 45 19t19 45-19 45l-137 137q71 66 161 102t187 36q134 0 250-65t186-179q11-17 53-117 8-23 30-23h192q13 0 22.5 9.5t9.5 22.5zm25-800v448q0 26-19 45t-45 19h-448q-26 0-45-19t-19-45 19-45l138-138q-148-137-349-137-134 0-250 65t-186 179q-11 17-53 117-8 23-30 23h-199q-13 0-22.5-9.5t-9.5-22.5v-7q65-268 270-434.5t480-166.5q146 0 284 55.5t245 156.5l130-129q19-19 45-19t45 19 19 45z" fill="#fff"/></svg>'
+  refresh_large: 'data:image/svg+xml;charset=utf-8,<svg width="1792" height="1792" viewBox="0 0 1792 1792" xmlns="http://www.w3.org/2000/svg"><path d="M1639 1056q0 5-1 7-64 268-268 434.5t-478 166.5q-146 0-282.5-55t-243.5-157l-129 129q-19 19-45 19t-45-19-19-45v-448q0-26 19-45t45-19h448q26 0 45 19t19 45-19 45l-137 137q71 66 161 102t187 36q134 0 250-65t186-179q11-17 53-117 8-23 30-23h192q13 0 22.5 9.5t9.5 22.5zm25-800v448q0 26-19 45t-45 19h-448q-26 0-45-19t-19-45 19-45l138-138q-148-137-349-137-134 0-250 65t-186 179q-11 17-53 117-8 23-30 23h-199q-13 0-22.5-9.5t-9.5-22.5v-7q65-268 270-434.5t480-166.5q146 0 284 55.5t245 156.5l130-129q19-19 45-19t45 19 19 45z" /></svg>'
 };
 
 // reusable functions to insert in implementations
@@ -272,14 +272,34 @@ var implementations = [{
 }, {
   name: 'mangafox',
   match: "^https?://(fan|manga)fox.(me|la|net)/manga/[^/]*/[^/]*/[^/]*",
-  img: '.read_img img',
-  next: '.read_img a',
-  numpages: function() {
-    return extractInfo('select.m') - 1;
+  img: '.reader-main img',
+  next: '.pager-list-left > span > a:last-child',
+  numpages: function() { return W.imagecount; },
+  curpage: function () { return W.imagepage; },
+  nextchap: '.pager-list-left > a:last-child',
+  prevchap: '.pager-list-left > a:first-child',
+  imgURLs: [],
+  pages: function(url, num, cb, ex) {
+    var imp = this;    
+    if (this.imgURLs[num])
+      cb(this.imgURLs[num], num);
+    else
+      ajax({
+        url: 'chapterfun.ashx?cid=' + W.chapterid + '&page=' + num,
+        onload: function(e) {
+          eval(e.target.responseText);
+          for (var i = 0; i < d.length; i++) {
+            imp.imgURLs[num + i] = d[i];
+          }
+          cb(d[0], num);
+        }
+      });
   },
-  curpage: 'select.m',
-  nextchap: '#chnav p + p a',
-  prevchap: '#chnav a'
+  wait: function () {
+    el = getEl('.reader-main img');
+    
+    return el && el.getAttribute('src') != el.getAttribute('data-loading-img');
+  }
 }, {
   name: 'manga-stream',
   match: "^https?://(readms|mangastream).(net|com)/(r|read)/[^/]*/[^/]*",
@@ -537,7 +557,7 @@ var implementations = [{
   img: '#divImage img',
   next: '#divImage img',
   numpages: function() {
-    return W.lstImages.length;
+    return (W.lstOLA || W.lstImages).length;
   },
   curpage: function() {
     if(getEls('#divImage img').length > 1) {
@@ -549,7 +569,7 @@ var implementations = [{
   nextchap: '#selectChapter, .selectChapter',
   prevchap: '#selectChapter, .selectChapter',
   pages: function(url, num, cb, ex) {
-    cb(W.lstImages[num - 1], num);
+    cb((W.lstOLA || W.lstImages)[num - 1], num);
   }
 }, {
   name: 'the-spectrum-scans',
@@ -2036,11 +2056,31 @@ var getViewer = function(prevChapter, nextChapter) {
     newZoomPostion =(document.documentElement.scrollHeight || document.body.scrollHeight)*ratioZoom;
     window.scroll(0, newZoomPostion);
   };
+  var goToPage = function(toWhichPage) {
+  	var curId = getCurrentImage().id;
+  	var nextId = curId.split('-');
+  	switch (toWhichPage) {
+  		case 'next':
+  			nextId[2] = parseInt(nextId[2]) + 1;
+  			break;
+  		case 'previous':
+  			nextId[2] = parseInt(nextId[2]) - 1;
+  			break;
+  	}
+  	var nextPage = getEl('#' + nextId.join('-'));
+  	if (nextPage == null) {
+  		log(curId + " > " + nextId);
+  		log("Reached the end!");
+  	} else {
+  		nextPage.scrollIntoView();
+  	}
+  }
   // keybindings
   UI.keys = {
     PREV_CHAP: 90, EXIT: 88, NEXT_CHAP: 67,
     SCROLL_UP: 87, SCROLL_DOWN: 83,
-    ZOOM_IN: 187, ZOOM_OUT: 189, RESET_ZOOM: 48
+    ZOOM_IN: 187, ZOOM_OUT: 189, RESET_ZOOM: 48,
+    PREV_PAGE: 37, NEXT_PAGE: 39,
   };
   // override defaults for firefox since different keycodes
   if(typeof InstallTrigger !== 'undefined') {
@@ -2094,6 +2134,12 @@ var getViewer = function(prevChapter, nextChapter) {
       case UI.keys.RESET_ZOOM:
         changeZoom('=', UI.images);
         break;
+      case UI.keys.NEXT_PAGE:
+        goToPage('next');
+        break;
+      case UI.keys.PREV_PAGE:
+      	goToPage('previous');
+      	break;
     }
   }, true);
   return UI;
@@ -2132,6 +2178,7 @@ var addImage = function(src, loc, imgNum, callback) {
       image.src = src;
     };
   };
+  image.id = 'ml-pageid-' + imgNum;
   image.onload = callback;
   image.src = src;
   loc.appendChild(image);
